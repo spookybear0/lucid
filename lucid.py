@@ -13,7 +13,7 @@ class LucidLexer(Lexer):
     def __init__(self):
         self.nesting_level = 0
     
-    tokens = { NAME, NUMBER, STRING, EXPONENT, EQUALS, NEWLINE } 
+    tokens = { NAME, NUMBER, STRING, EXPONENT, NEWLINE, EQ, INEQ, GE, LE } 
     ignore = " \t"
     literals = {"=", "+", "-", "/", ":", "{", "}",
                 "*", "(", ")", ",", ";", "."} 
@@ -22,7 +22,11 @@ class LucidLexer(Lexer):
     STRING = r"\".*?\""
     
     EXPONENT = r'\*\*'
-    EQUALS = r'=='
+    
+    EQ = r'=='
+    INEQ = r'!='
+    GE = r'(>=|>)'
+    LE = r'(<=|<)'
     
     @_(r'''("[^"\\]*(\\.[^"\\]*)*"|'[^'\\]*(\\.[^'\\]*)*')''')
     def STRING(self, t):
@@ -66,7 +70,7 @@ class LucidParser(Parser):
     precedence = ( 
         ("left", "+", "-"), 
         ("left", "*", "/"),
-        ("left", "EXPONENT", "EQUALS"),
+        ("left", "EXPONENT", "EQ"),
         ("right", "UMINUS"),
     ) 
   
@@ -109,9 +113,21 @@ class LucidParser(Parser):
     def expr(self, p):
         return (exprs.EXPONENT, p.expr0, p.expr1)
     
-    @_('expr EQUALS expr') 
+    @_('expr EQ expr') 
     def expr(self, p): 
         return (exprs.EQUALS, p.expr0, p.expr1) 
+    
+    @_('expr INEQ expr') 
+    def expr(self, p): 
+        return (exprs.NOTEQUALS, p.expr0, p.expr1) 
+    
+    @_('expr GE expr') 
+    def expr(self, p): 
+        return (exprs.GREATER, p.expr0, p.expr1, p.GE) 
+
+    @_('expr LE expr') 
+    def expr(self, p):
+        return (exprs.LESS, p.expr0, p.expr1, p.LE) 
   
     @_('"-" expr %prec UMINUS') 
     def expr(self, p): 
@@ -284,6 +300,18 @@ class LucidExecute:
                     return self.env[varname] 
                 except LookupError: 
                     print(f"Undefined variable \"{varname}\"!")
+                    
+            case [exprs.LESS, num1, num2, type]:
+                if len(type) == 2:
+                    return Boolean(self.evaluate(num1) <= self.evaluate(num2))
+                else:
+                    return Boolean(self.evaluate(num1) < self.evaluate(num2))
+                
+            case [exprs.GREATER, num1, num2, type]:
+                if len(type) == 2:
+                    return Boolean(self.evaluate(num1) >= self.evaluate(num2))
+                else:
+                    return Boolean(self.evaluate(num1) > self.evaluate(num2))
                     
             case ["if", expr, statement]:
                 expr_result = self.evaluate(expr)

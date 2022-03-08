@@ -18,6 +18,8 @@ class exprs(Enum):
     PAREN = 13
     GETCHILD = 14
     USING = 15
+    LESS = 16
+    GREATER = 17
 
 def disable_warnings():
     def warning(*args, **kwargs):
