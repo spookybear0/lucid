@@ -1,22 +1,24 @@
 from sly import Lexer, Parser
 import importlib
-from lucid_types import Object, Integer, String, lucid_builtins, true, false, Boolean
+from lucid_types import Object, Integer, String, lucid_builtins, Boolean
+from lucid_helpers import disable_warnings
 import os
 import click
+
+disable_warnings()
 
 path = os.path.dirname(os.path.abspath(__file__))
 
 class BasicLexer(Lexer): 
-    tokens = { NAME, NUMBER, STRING, EXPONENT, EQUALS, TRUEDIV } 
+    tokens = { NAME, NUMBER, STRING, EXPONENT, EQUALS } 
     ignore = "\t "
-    literals = {"=", "+", "-", "/", "//", ":",
+    literals = {"=", "+", "-", "/", ":",
                 "*", "(", ")", ",", ";", "."} 
   
     NAME = r"[a-zA-Z_][a-zA-Z0-9_]*"
     STRING = r"\".*?\""
     
     EXPONENT = r'\*\*'
-    TRUEDIV = r'\/\/'
     EQUALS = r'=='
     
     @_(r'''("[^"\\]*(\\.[^"\\]*)*"|'[^'\\]*(\\.[^'\\]*)*')''')
@@ -29,7 +31,7 @@ class BasicLexer(Lexer):
         t.value = Integer(t.value)  
         return t 
   
-    @_(r"//.*") 
+    @_(r"//.*$") 
     def COMMENT(self, t): 
         pass
   
@@ -48,8 +50,9 @@ class BasicParser(Parser):
   
     precedence = ( 
         ("left", "+", "-"), 
-        ("left", "*", "/"), 
-        ("right", "UMINUS"), 
+        ("left", "*", "/"),
+        ("left", "EXPONENT", "EQUALS"),
+        ("right", "UMINUS")
     ) 
   
     def __init__(self): 
@@ -66,10 +69,6 @@ class BasicParser(Parser):
     @_('NAME "=" expr') 
     def var_assign(self, p): 
         return ("var_assign", p.NAME, p.expr) 
-  
-    @_('NAME "=" STRING') 
-    def var_assign(self, p): 
-        return ("var_assign", p.NAME, p.STRING) 
   
     @_("expr") 
     def statement(self, p): 
@@ -94,10 +93,6 @@ class BasicParser(Parser):
     @_('expr EXPONENT expr') 
     def expr(self, p): 
         return ("exponent", p.expr0, p.expr1) 
-    
-    @_('expr TRUEDIV expr') 
-    def expr(self, p): 
-        return ("truediv", p.expr0, p.expr1) 
     
     @_('expr EQUALS expr') 
     def expr(self, p): 
@@ -130,6 +125,9 @@ class BasicParser(Parser):
                     continue
                 args.append(getattr(p, f"expr{j-skipped}"))
             return ("call", *args)
+        prec = list(precedence)
+        precedence = tuple(prec)
+
     
     @_('expr "(" expr ")" ')
     def expr(self, p):
@@ -160,8 +158,7 @@ class BasicExecute:
         if result is not None and interpreter: 
             print(result) 
   
-    def evaluate(self, node): 
-  
+    def evaluate(self, node):
         if isinstance(node, Object): 
             return node
   
@@ -199,9 +196,6 @@ class BasicExecute:
             
             case ["exponent", num1, num2]:
                 return self.evaluate(num1) ** self.evaluate(num2)
-            
-            case ["truediv", num1, num2]:
-                return self.evaluate(num1) // self.evaluate(num2)
             
             case ["equals", num1, num2]:
                 return Boolean(self.evaluate(num1) == self.evaluate(num2))
@@ -295,7 +289,7 @@ def interpret_file(filename):
         file = open(filename, "r")
     except FileNotFoundError:
         file = open(path + "\\" + filename, "r")
-    
+
     for line in file.readlines():
         tree = parser.parse(lexer.tokenize(line))
         BasicExecute(tree, env)
