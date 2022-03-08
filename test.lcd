@@ -1,5 +1,0 @@
-
-
-using std.math
-
-print(math.pi)
