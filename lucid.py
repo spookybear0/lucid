@@ -1,18 +1,21 @@
+from lucid_types import Object, Integer, String, lucid_builtins, Boolean
+from lucid_helpers import disable_warnings, exprs
 from sly import Lexer, Parser
 import importlib
-from lucid_types import Object, Integer, String, lucid_builtins, Boolean
-from lucid_helpers import disable_warnings
-import os
 import click
+import os
 
 disable_warnings()
 
 path = os.path.dirname(os.path.abspath(__file__))
 
-class BasicLexer(Lexer): 
-    tokens = { NAME, NUMBER, STRING, EXPONENT, EQUALS } 
-    ignore = "\t "
-    literals = {"=", "+", "-", "/", ":",
+class LucidLexer(Lexer):
+    def __init__(self):
+        self.nesting_level = 0
+    
+    tokens = { NAME, NUMBER, STRING, EXPONENT, EQUALS, NEWLINE } 
+    ignore = " \t"
+    literals = {"=", "+", "-", "/", ":", "{", "}",
                 "*", "(", ")", ",", ";", "."} 
   
     NAME = r"[a-zA-Z_][a-zA-Z0-9_]*"
@@ -34,9 +37,21 @@ class BasicLexer(Lexer):
     @_(r"//.*$") 
     def COMMENT(self, t): 
         pass
+    
+    @_(r'\{')
+    def lbrace(self, t):
+        t.type = '{'
+        self.nesting_level += 1
+        return t
+
+    @_(r'\}')
+    def rbrace(self, t):
+        t.type = '}'
+        self.nesting_level -=1
+        return t
   
     @_(r"\n+") 
-    def newline(self, t): 
+    def NEWLINE(self, t):
         self.lineno = t.value.count("\n")
         
     def remove_quotes(self, text: String):
@@ -45,14 +60,14 @@ class BasicLexer(Lexer):
         return text
 
 
-class BasicParser(Parser): 
-    tokens = BasicLexer.tokens 
+class LucidParser(Parser): 
+    tokens = LucidLexer.tokens 
   
     precedence = ( 
         ("left", "+", "-"), 
         ("left", "*", "/"),
         ("left", "EXPONENT", "EQUALS"),
-        ("right", "UMINUS")
+        ("right", "UMINUS"),
     ) 
   
     def __init__(self): 
@@ -62,41 +77,41 @@ class BasicParser(Parser):
     def statement(self, p): 
         pass
   
-    @_("var_assign") 
-    def statement(self, p): 
-        return p.var_assign 
+    @_("var_assign")
+    def statement(self, p):
+        return p.var_assign
   
-    @_('NAME "=" expr') 
-    def var_assign(self, p): 
-        return ("var_assign", p.NAME, p.expr) 
+    @_('NAME "=" expr')
+    def var_assign(self, p):
+        return (exprs.VAR_ASSIGN, p.NAME, p.expr) 
   
-    @_("expr") 
-    def statement(self, p): 
-        return (p.expr) 
+    @_("expr")
+    def statement(self, p):
+        return (p.expr)
   
     @_('expr "+" expr') 
     def expr(self, p): 
-        return ("add", p.expr0, p.expr1) 
+        return (exprs.ADD, p.expr0, p.expr1) 
   
-    @_('expr "-" expr') 
-    def expr(self, p): 
-        return ("sub", p.expr0, p.expr1) 
+    @_('expr "-" expr')
+    def expr(self, p):
+        return (exprs.SUB, p.expr0, p.expr1)
   
-    @_('expr "*" expr') 
-    def expr(self, p): 
-        return ("mul", p.expr0, p.expr1) 
+    @_('expr "*" expr')
+    def expr(self, p):
+        return (exprs.MUL, p.expr0, p.expr1)
   
-    @_('expr "/" expr') 
-    def expr(self, p): 
-        return ("div", p.expr0, p.expr1) 
+    @_('expr "/" expr')
+    def expr(self, p):
+        return (exprs.DIV, p.expr0, p.expr1)
     
-    @_('expr EXPONENT expr') 
-    def expr(self, p): 
-        return ("exponent", p.expr0, p.expr1) 
+    @_('expr EXPONENT expr')
+    def expr(self, p):
+        return (exprs.EXPONENT, p.expr0, p.expr1)
     
     @_('expr EQUALS expr') 
     def expr(self, p): 
-        return ("equals", p.expr0, p.expr1) 
+        return (exprs.EQUALS, p.expr0, p.expr1) 
   
     @_('"-" expr %prec UMINUS') 
     def expr(self, p): 
@@ -104,15 +119,15 @@ class BasicParser(Parser):
   
     @_("NAME") 
     def expr(self, p): 
-        return ("var", p.NAME) 
+        return (exprs.VAR, p.NAME) 
   
     @_("NUMBER") 
     def expr(self, p): 
-        return ("num", p.NUMBER)
+        return (exprs.NUM, p.NUMBER)
     
     @_("STRING") 
     def expr(self, p): 
-        return ("str", p.STRING)
+        return (exprs.STR, p.STRING)
     
     for i in range(1, 50):
         @_('expr "(" expr' + ' "," expr' * i + ' ")"')
@@ -124,33 +139,33 @@ class BasicParser(Parser):
                     skipped += 1
                     continue
                 args.append(getattr(p, f"expr{j-skipped}"))
-            return ("call", *args)
+            return (exprs.CALL, *args)
         prec = list(precedence)
         precedence = tuple(prec)
 
     
     @_('expr "(" expr ")" ')
     def expr(self, p):
-        return ("call", p.expr0, p.expr1)
+        return (exprs.CALL, p.expr0, p.expr1)
 
     @_('expr "(" ")" ')
     def expr(self, p):
-        return ("call", p.expr)
+        return (exprs.CALL, p.expr)
     
     @_('"(" expr ")"')
     def expr(self, p):
-        return ("paren", p.expr)
+        return (exprs.PAREN, p.expr)
     
     @_('expr "." expr')
     def expr(self, p):
-        return ("getchild", p.expr0, p.expr1)
+        return (exprs.GETCHILD, p.expr0, p.expr1)
     
     @_('expr expr')
     def expr(self, p):
         if p.expr0[1] == "using":
-            return ("import", p.expr1)
+            return (exprs.USING, p.expr1)
 
-class BasicExecute: 
+class LucidExecute: 
     
     def __init__(self, tree, env, interpreter=False): 
         self.env = env 
@@ -166,50 +181,55 @@ class BasicExecute:
             return None
         
         match node:
-            case ["program", node1, node2]: 
+            case [exprs.PROGRAM, node1, node2]: 
                 if node1 == None: 
                     self.evaluate(node2) 
                 else: 
                     self.evaluate(node1) 
                     self.evaluate(node2) 
                     
-            case ["paren", expr]:
+            case [exprs.PAREN, expr]:
                 return self.evaluate(expr)
     
-            case ["num", number]:
+            case [exprs.NUM, number]:
                 return Integer(number)
     
-            case ["str", string]: 
+            case [exprs.STR, string]: 
                 return String(string)
     
-            case ["add", num1, num2]:
+            case [exprs.ADD, num1, num2]:
                 return self.evaluate(num1) + self.evaluate(num2)
             
-            case ["sub", num1, num2]: 
+            case [exprs.SUB, num1, num2]: 
                 return self.evaluate(num1) - self.evaluate(num2)
             
-            case ["mul", num1, num2]: 
+            case [exprs.MUL, num1, num2]: 
                 return self.evaluate(num1) * self.evaluate(num2)
             
-            case ["div", num1, num2]:
+            case [exprs.DIV, num1, num2]:
                 return self.evaluate(num1) / self.evaluate(num2)
             
-            case ["exponent", num1, num2]:
+            case [exprs.EXPONENT, num1, num2]:
                 return self.evaluate(num1) ** self.evaluate(num2)
             
-            case ["equals", num1, num2]:
+            case [exprs.EQUALS, num1, num2]:
                 return Boolean(self.evaluate(num1) == self.evaluate(num2))
             
-            case ["getchild", *args]: # im not even going to bother with struct matching on this
+            case [exprs.GETCHILD, *args]: # im not even going to bother with struct matching on this
                 call = False
-                var1 = self.evaluate(("str", node[1][1]))
-                if node[2][0] == "call":
+                var1 = self.evaluate((exprs.STR, node[1][1]))
+                if node[2][0] == exprs.CALL:
                     call = True
-                    var2 = self.evaluate(("str", node[2][1][1]))
+                    var2 = self.evaluate((exprs.STR, node[2][1][1]))
                 else:
-                    var2 = self.evaluate(("str", node[2][1]))
+                    var2 = self.evaluate((exprs.STR, node[2][1]))
                 
-                attribute = getattr(self.env[var1], var2)
+                var1_index = self.env[var1]
+                
+                try:
+                    attribute = getattr(var1_index, var2)
+                except AttributeError:
+                    attribute = var1_index[var2]
                 
                 if call:
                     args = []
@@ -219,30 +239,36 @@ class BasicExecute:
                 else:
                     return attribute
                 
-            case ["import", ["getchild", [_, cname1], [_, cname2]]]:
+            case [exprs.USING, [exprs.GETCHILD, [_, cname1], [_, cname2]]]:
                 toimport = cname1 + "." + cname2
                 if toimport.startswith("std."):
                     toimport = toimport.replace("std.", "std.lcd_")
                     name = toimport.replace("std.lcd_", "")
+                elif toimport.endswith(".py"):
+                    name = toimport.replace(".py", "")
+                    toimport = name
                 self.env[name] = importlib.import_module(toimport)
                 
-            case ["import", [_, name]]:
-                return NotImplementedError("Importing a single module is not supported yet")
-                # should import only .lcd files
-                #self.env[name] = importlib.import_module(name)
+            case [exprs.USING, [_, name]]:
+                try:
+                    file = open(f"{name}.lcd", "r")
+                except FileNotFoundError:
+                    file = open(path + "\\" + f"{name}.lcd", "r")
+                self.env[name] = import_lucid_file(file)
+                    
     
-            case ["var_assign", name, var]:
+            case [exprs.VAR_ASSIGN, name, var]:
                 if isinstance(var, str):
-                    to_assign = self.evaluate(("str", var))
+                    to_assign = self.evaluate((exprs.STR, var))
                 elif isinstance(var, int):
-                    to_assign = self.evaluate(("num", var))
+                    to_assign = self.evaluate((exprs.NUM, var))
                 else:
                     to_assign = self.evaluate(var)
                     
                 self.env[name] = to_assign
                 return
             
-            case ["call", name, args]:
+            case [exprs.CALL, name, args]:
                 func_name = node[1][1]
                 args = []
                 for n in node[2:]: # args
@@ -253,15 +279,38 @@ class BasicExecute:
                 if result:
                     return result
     
-            case ["var", varname]:
+            case [exprs.VAR, varname]:
                 try:
                     return self.env[varname] 
                 except LookupError: 
-                    print(f"Undefined variable \"{varname}\"!") 
+                    print(f"Undefined variable \"{varname}\"!")
+                    
+            case ["if", expr, statement]:
+                expr_result = self.evaluate(expr)
+                if expr_result:
+                    self.evaluate(statement)
+                    
+            case ["elif", expr, statement1, statement2]:
+                expr_result = self.evaluate(expr)
+                if expr_result:
+                    self.evaluate(statement1)
+                else:
+                    self.evaluate(statement2)
+                    
+def import_lucid_file(file):
+    local_env = {}
+    
+    data = file.read()
+    
+    lexer = LucidLexer()
+    parser = LucidParser()
+    tree = parser.parse(lexer.tokenize(data))
+    LucidExecute(tree, local_env)
+    return local_env
 
 def interpreter():
-    lexer = BasicLexer()
-    parser = BasicParser()
+    lexer = LucidLexer()
+    parser = LucidParser()
     print("lucid v0.0.1d")
     env = lucid_builtins
       
@@ -278,11 +327,11 @@ def interpreter():
           
         if text: 
             tree = parser.parse(lexer.tokenize(text)) 
-            BasicExecute(tree, env, True)
+            LucidExecute(tree, env, True)
             
 def interpret_file(filename):
-    lexer = BasicLexer() 
-    parser = BasicParser()
+    lexer = LucidLexer() 
+    parser = LucidParser()
     env = lucid_builtins
     
     try:
@@ -292,7 +341,7 @@ def interpret_file(filename):
 
     for line in file.readlines():
         tree = parser.parse(lexer.tokenize(line))
-        BasicExecute(tree, env)
+        LucidExecute(tree, env)
 
 @click.command()
 @click.argument("filename", required=False)

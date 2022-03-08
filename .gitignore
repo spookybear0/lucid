@@ -152,4 +152,5 @@ cython_debug/
 #.idea/
 
 test.lcd
+test2.lcd
 test.py

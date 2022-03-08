@@ -36,10 +36,10 @@ class Boolean(Object):
             self.value = false
         
     def __bool__(self):
-        return self.value
+        return self.value.__bool__()
     
     def __repr__(self):
-        return self.value
+        return str(self.value)
 
 class Integer(Object, int):
     def __new__(cls, value: int):
@@ -75,7 +75,7 @@ types = {
 
 funcs = {
     "print": print,
-    "type": type
+    "type": type,
 }
 
 lucid_builtins = {
