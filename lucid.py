@@ -2,7 +2,9 @@ from lucid_types import Object, Integer, String, lucid_builtins, Boolean
 from lucid_helpers import disable_warnings, exprs
 from sly import Lexer, Parser
 import importlib
+import pathlib
 import click
+import sys
 import os
 
 disable_warnings()
@@ -207,7 +209,7 @@ class LucidExecute:
             case [exprs.PAREN, expr]:
                 return self.evaluate(expr)
     
-            case [exprs.NUM, number]:
+            case [exprs.NUM, number]: 
                 return Integer(number)
     
             case [exprs.STR, string]: 
@@ -363,9 +365,13 @@ def interpret_file(filename):
     env = lucid_builtins
     
     try:
-        file = open(filename, "r")
+        filepath = filename
+        file = open(filepath, "r")
     except FileNotFoundError:
-        file = open(path + "\\" + filename, "r")
+        filepath = path + "\\" + filename
+        file = open(filepath, "r")
+    
+    sys.path.append(filepath.replace(pathlib.PurePath(filename).name, ""))
 
     for line in file.readlines():
         tree = parser.parse(lexer.tokenize(line))
