@@ -84,6 +84,7 @@ types = {
 funcs = {
     "print": print,
     "type": type,
+    "tree": dir,
 }
 
 lucid_builtins = {**types, **funcs}

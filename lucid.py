@@ -243,7 +243,6 @@ class LucidExecute:
             case [exprs.GETCHILD, var1, var2]:
                 string = False
                 if var1[0] == exprs.VAR or exprs.GETCHILD:
-                    print("a")
                     var1 = self.evaluate(var1)
                 else:
                     string = True
