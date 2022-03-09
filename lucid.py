@@ -74,6 +74,7 @@ class LucidParser(Parser):
         ("left", "*", "/"),
         ("left", "EXPONENT", "EQ"),
         ("right", "UMINUS"),
+        ("left", "."),
     )
 
     def __init__(self):
@@ -192,6 +193,11 @@ class LucidExecute:
         if result is not None and interpreter:
             print(result)
 
+    def get_var_name(self, var):
+        if var[0] == exprs.VAR:
+            return var[1]
+        return self.evaluate(var)
+
     def evaluate(self, node):
         if isinstance(node, Object):
             return node
@@ -234,32 +240,22 @@ class LucidExecute:
             case [exprs.EQUALS, num1, num2]:
                 return Boolean(self.evaluate(num1) == self.evaluate(num2))
 
-            case [
-                exprs.GETCHILD,
-                *args,
-            ]:  # im not even going to bother with struct matching on this
-                call = False
-                var1 = self.evaluate((exprs.STR, node[1][1]))
-                if node[2][0] == exprs.CALL:
-                    call = True
-                    var2 = self.evaluate((exprs.STR, node[2][1][1]))
+            case [exprs.GETCHILD, var1, var2]:
+                string = False
+                if var1[0] == exprs.VAR or exprs.GETCHILD:
+                    print("a")
+                    var1 = self.evaluate(var1)
                 else:
-                    var2 = self.evaluate((exprs.STR, node[2][1]))
+                    string = True
+                    var1 = var1[1]
+                var2 = var2[1]
 
-                var1_index = self.env[var1]
-
-                try:
-                    attribute = getattr(var1_index, var2)
-                except AttributeError:
-                    attribute = var1_index[var2]
-
-                if call:
-                    args = []
-                    for arg in node[2][2:]:
-                        args.append(self.evaluate(arg))
-                    return attribute(*args)
+                if string:
+                    current_var = getattr(self.env[var1], var2)
                 else:
-                    return attribute
+                    current_var = getattr(var1, var2)
+
+                return current_var
 
             case [exprs.USING, [exprs.GETCHILD, [_, cname1], [_, cname2]]]:
                 toimport = cname1 + "." + cname2
@@ -290,13 +286,13 @@ class LucidExecute:
                 return
 
             case [exprs.CALL, name, args]:
-                func_name = node[1][1]
+                func = self.evaluate(name)
                 args = []
                 for n in node[2:]:  # args
                     args.append(self.evaluate(n))
 
                 # call
-                result = self.env[func_name](*args)
+                result = func(*args)
                 if result:
                     return result
 
