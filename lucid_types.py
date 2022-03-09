@@ -1,32 +1,36 @@
-
 __name__ = "types"
+
 
 class Object:
     def __init__(self) -> None:
         pass
 
+
 class false_t(Object):
     def __bool__(self):
         return False
-    
+
     def __repr__(self):
         return "false"
-    
+
     def __str__(self):
         return "false"
+
 
 class true_t(Object):
     def __bool__(self):
         return True
-    
+
     def __repr__(self):
         return "true"
-    
+
     def __str__(self):
         return "true"
-    
+
+
 true = true_t()
 false = false_t()
+
 
 class Boolean(Object):
     def __init__(self, value: bool):
@@ -34,12 +38,13 @@ class Boolean(Object):
             self.value = true
         else:
             self.value = false
-        
+
     def __bool__(self):
         return self.value.__bool__()
-    
+
     def __repr__(self):
         return str(self.value)
+
 
 class Integer(Object, int):
     def __new__(cls, value: int):
@@ -48,21 +53,24 @@ class Integer(Object, int):
     def __init__(self, value: int):
         Object.__init__(self)
 
-class String(Object, str):      
+
+class String(Object, str):
     def __new__(cls, content):
         return str.__new__(cls, content)
-    
+
     def __init__(self, content):
         Object.__init__(self)
-        
+
+
 class Callable(Object):
     def __init__(self, func):
         self._func = func
         Object.__init__(self)
-        
+
     def call(self, *args, **kwargs):
         return self._func(*args, **kwargs)
-    
+
+
 types = {
     "true": true,
     "false": false,
@@ -70,7 +78,7 @@ types = {
     "Callable": Callable,
     "String": String,
     "Integer": Integer,
-    "Object": Object
+    "Object": Object,
 }
 
 funcs = {
@@ -78,7 +86,4 @@ funcs = {
     "type": type,
 }
 
-lucid_builtins = {
-    **types,
-    **funcs
-}
+lucid_builtins = {**types, **funcs}

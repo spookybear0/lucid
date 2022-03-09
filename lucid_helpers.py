@@ -1,6 +1,7 @@
 from sly.yacc import SlyLogger
 from enum import Enum
 
+
 class exprs(Enum):
     UNKNOWN = 0
     PROGRAM = 1
@@ -21,8 +22,9 @@ class exprs(Enum):
     LESS = 16
     GREATER = 17
 
+
 def disable_warnings():
     def warning(*args, **kwargs):
         pass
-    
+
     SlyLogger.warning = warning
